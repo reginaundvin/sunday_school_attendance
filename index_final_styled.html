@@ -137,15 +137,13 @@
           <span>to</span>
           <input id="toDate" type="date">
           <button class="btn" onclick="refreshReport()">Refresh</button>
-          <button onclick="exportCSV()">📊 Export CSV (raw)</button>
-<button onclick="exportXLSX()">📑 Export Excel (styled)</button>
-          <button class="btn ok" onclick="backupReportToGoogleSheets()">Backup to Google Sheets</button>
+          <button onclick="exportXLSX()">📑 Export Excel (styled)</button>
         </div>
       </div>
       <div id="reportSummary" class="mb12"></div>
       <table>
         <thead>
-          <tr><th>#</th><th>Name</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th><th>Total</th><th>% Present</th></tr>
+          <tr><th>#</th><th>Name</th><th>Present</th><th>Absent</th><th>Total</th><th>% Present</th></tr>
         </thead>
         <tbody id="reportBody"></tbody>
       </table>
@@ -408,15 +406,17 @@ function refreshReport(){
   $('fromDate').value = from; $('toDate').value = to;
 
   // compute
-  const rows = c.students.map((s)=>({ id:s.id, name:s.name, Present:0, Absent:0, Late:0, Excused:0, Total:0 }));
+  const rows = c.students.map((s)=>({ id:s.id, name:s.name, Present:0, Absent:0, Total:0 }));
   const dates = datesInRange(from,to);
   dates.forEach(date=>{
     const day = c.attendance[date] || {};
     rows.forEach(r=>{
       const rec = day[r.id];
       if(rec && rec.status){
-        r[rec.status] += 1;
-        r.Total += 1;
+        if(rec.status === "Present") r.Present++;
+        else if(rec.status === "Absent") r.Absent++;
+        r.Total++;
+      }
       }
     });
   });
@@ -429,7 +429,7 @@ function refreshReport(){
     const pct = r.Total ? Math.round((r.Present/r.Total)*100) : 0;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${i+1}</td><td>${escapeHtml(r.name)}</td>
-      <td>${r.Present}</td><td>${r.Absent}</td><td>${r.Late}</td><td>${r.Excused}</td>
+      <td>${r.Present}</td><td>${r.Absent}</td>
       <td>${r.Total}</td><td>${pct}%</td>`;
     body.appendChild(tr);
   });
@@ -441,7 +441,7 @@ function buildReportMatrix(){
   const from = $('fromDate').value;
   const to = $('toDate').value;
   if(!c) throw new Error('Select a class.');
-  const headers = ['#','Name','Present','Absent','Late','Excused','Total','% Present'];
+  matrix.push([i+1, r.name, r.Present, r.Absent, r.Total, pct+'%']);
   // compute same as refreshReport
   const rows = c.students.map((s)=>({ id:s.id, name:s.name, Present:0, Absent:0, Late:0, Excused:0, Total:0 }));
   const dates = datesInRange(from,to);
