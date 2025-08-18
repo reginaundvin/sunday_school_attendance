@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunday School Attendance</title>
+<meta name="description" content="Simple, offline-ready Sunday School attendance tracker. Data stored in your browser.">
+<style>
+  :root{
+    --bg:#0f172a;--card:#ffffff;--muted:#64748b;--text:#0f172a;--brand:#2563eb;--brand-2:#22c55e;
+    --danger:#ef4444;--warn:#f59e0b;--ok:#16a34a;--soft:#f1f5f9;--soft-2:#e2e8f0;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;
+       background:#f8fafc;color:var(--text);}
+  header{background:var(--bg);color:#fff;padding:16px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.3px}
+  header .tag{font-size:12px;background:rgba(255,255,255,.1);padding:4px 8px;border-radius:999px}
+  .container{display:grid;grid-template-columns:260px 1fr;gap:16px;padding:16px;max-width:1200px;margin:0 auto}
+  @media (max-width:900px){.container{grid-template-columns:1fr}}
+  aside{background:#fff;border:1px solid var(--soft-2);border-radius:14px;padding:12px}
+  main{min-height:60vh}
+  .card{background:#fff;border:1px solid var(--soft-2);border-radius:14px;padding:16px;margin-bottom:16px}
+  .section-title{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px 0}
+  .section-title h2{font-size:18px;margin:0}
+  .muted{color:var(--muted)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .grow{flex:1}
+  input[type="text"], input[type="date"], input[type="number"], select, textarea{
+    width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--soft-2);background:#fff
+  }
+  textarea{min-height:80px}
+  button{padding:10px 12px;border-radius:10px;border:1px solid var(--soft-2);background:#fff;cursor:pointer}
+  .btn{background:var(--brand);color:#fff;border:0}
+  .btn.secondary{background:var(--bg)}
+  .btn.ok{background:var(--ok)}
+  .btn.warn{background:var(--warn)}
+  .btn.danger{background:var(--danger)}
+  .list{list-style:none;margin:0;padding:0}
+  .list li{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px dashed var(--soft-2)}
+  .pill{padding:2px 8px;border-radius:999px;background:var(--soft);border:1px solid var(--soft-2);font-size:12px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:10px;border-bottom:1px solid var(--soft-2);vertical-align:top}
+  th{background:#f1f5f9;text-align:left;font-weight:600}
+  .status-select{min-width:120px}
+  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+       background:#e2e8f0;border:1px solid #cbd5e1;border-bottom-width:3px;border-radius:6px;padding:0 6px;font-size:12px}
+  .small{font-size:12px}
+  .right{float:right}
+  .center{text-align:center}
+  .mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb16{margin-bottom:16px}
+  .hidden{display:none}
+  .link{color:var(--brand);text-decoration:none}
+  footer{padding:20px 16px;color:var(--muted);text-align:center}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+</head>
+<body>
+<header>
+  <h1>Sunday School Attendance</h1>
+  <span class="tag">Offline · Data stays in this browser</span>
+  <span class="tag">Export/Import supported</span>
+</header>
+
+<div class="container">
+  <aside>
+    <div class="row mb12">
+      <input id="newClassName" type="text" placeholder="New class name e.g., Grade 3 - Room A" class="grow">
+      <button class="btn" onclick="addClass()">Add Class</button>
+    </div>
+    <ul id="classList" class="list"></ul>
+  </aside>
+
+  <main>
+    <div class="card">
+      <div class="section-title">
+        <h2 id="currentClassTitle">No class selected</h2>
+        <div class="row">
+          <button class="btn warn" onclick="renameClass()" id="btnRenameClass" disabled>Rename</button>
+          <button class="btn danger" onclick="deleteClass()" id="btnDeleteClass" disabled>Delete</button>
+        </div>
+      </div>
+      <div class="muted small mb12">Tip: switch sections below to manage roster, take attendance, and export reports.</div>
+
+      <div class="row mb12">
+        <button class="btn secondary" onclick="switchTab('roster')" id="tabRoster">Roster</button>
+        <button class="btn secondary" onclick="switchTab('attendance')" id="tabAttendance">Attendance</button>
+        <button class="btn secondary" onclick="switchTab('reports')" id="tabReports">Reports</button>
+        <button class="btn secondary" onclick="switchTab('backup')" id="tabBackup">Backup</button>
+      </div>
+    </div>
+
+    <section id="view-roster" class="card hidden">
+      <div class="section-title">
+        <h2>Roster</h2>
+        <div class="row">
+          <input id="newStudentName" type="text" placeholder="Student full name">
+          <input id="newStudentGuardian" type="text" placeholder="Parent/Guardian (optional)">
+          <input id="newStudentPhone" type="text" placeholder="Contact (optional)">
+          <button class="btn" onclick="addStudent()">Add Student</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Name</th><th>Guardian</th><th>Phone</th><th></th></tr>
+        </thead>
+        <tbody id="rosterBody"></tbody>
+      </table>
+    </section>
+
+    <section id="view-attendance" class="card hidden">
+      <div class="section-title">
+        <h2>Take Attendance</h2>
+        <div class="row">
+          <input id="attendanceDate" type="date">
+          <button class="btn ok" onclick="markAll('Present')">Mark All Present</button>
+          <button onclick="markAll('Absent')">All Absent</button>
+          <button onclick="markAll('Excused')">All Excused</button>
+          <button class="btn" onclick="saveAttendance()">Save</button>
+          <button onclick="printSheet()">Print Sheet</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Name</th><th>Status</th><th>Note</th></tr>
+        </thead>
+        <tbody id="attendanceBody"></tbody>
+      </table>
+    </section>
+
+    <section id="view-reports" class="card hidden">
+      <div class="section-title">
+        <h2>Reports</h2>
+        <div class="row">
+          <input id="fromDate" type="date">
+          <span>to</span>
+          <input id="toDate" type="date">
+          <button class="btn" onclick="refreshReport()">Refresh</button>
+          <button onclick="exportCSV()">📊 Export CSV (raw)</button>
+<button onclick="exportXLSX()">📑 Export Excel (styled)</button>
+          <button class="btn ok" onclick="backupReportToGoogleSheets()">Backup to Google Sheets</button>
+        </div>
+      </div>
+      <div id="reportSummary" class="mb12"></div>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Name</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th><th>Total</th><th>% Present</th></tr>
+        </thead>
+        <tbody id="reportBody"></tbody>
+      </table>
+      <div class="small muted mb8">First time? See bottom of page for Google Sheets setup.</div>
+    </section>
+
+    <section id="view-backup" class="card hidden">
+      <div class="section-title"><h2>Backup & Restore</h2></div>
+      <div class="row mb8">
+        <button class="btn" onclick="exportJSON()">Download Backup (.json)</button>
+        <label class="pill">To restore, choose a backup file:</label>
+        <input type="file" id="importFile" accept=".json" onchange="importJSON(event)">
+      </div>
+      <div class="muted small">Backups include all classes, rosters, and attendance.</div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  Made for Sunday Schools. Works offline. Keep a backup regularly.
+  <div class="small muted" style="margin-top:8px">
+    Google Sheets setup: Create an API key and OAuth Client ID (Web) in Google Cloud Console, enable "Google Sheets API", then paste your credentials into this page (see script constants CLIENT_ID / API_KEY).
+  </div>
+</footer>
+
+<!-- Google APIs: client + Identity Services -->
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<script>
+// ======= Data Layer =======
+const STORE_KEY = 'ss_attendance_v1';
+
+function blankData(){
+  return { classes: {}, selectedClassId: null };
+}
+
+function loadData(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    return raw ? JSON.parse(raw) : blankData();
+  }catch(e){
+    console.error('Failed to load data', e);
+    return blankData();
+  }
+}
+
+function saveData(){
+  localStorage.setItem(STORE_KEY, JSON.stringify(db));
+}
+
+function uid(){ return 'id_'+Math.random().toString(36).slice(2)+Date.now().toString(36); }
+
+let db = loadData();
+
+function getSelectedClass(){
+  const id = db.selectedClassId;
+  if(!id) return null;
+  return db.classes[id] || null;
+}
+
+// ======= UI Helpers =======
+function formatDate(d){
+  const iso = new Date(d);
+  if (isNaN(iso.getTime())) return '';
+  return iso.toISOString().slice(0,10);
+}
+
+function $(id){ return document.getElementById(id); }
+
+function setDisabled(id, v){ $(id).disabled = v; }
+
+function switchTab(name){
+  // show section
+  ['roster','attendance','reports','backup'].forEach(t => {
+    const el = document.getElementById('view-'+t);
+    if(el) el.classList.toggle('hidden', t!==name);
+    document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('btn', t===name);
+  });
+  if(name==='roster') renderRoster();
+  if(name==='attendance') renderAttendance();
+  if(name==='reports') refreshReport();
+  if(name==='backup') {/*noop*/}
+}
+
+// ======= Class Management =======
+function addClass(){
+  const name = $('newClassName').value.trim();
+  if(!name) return alert('Please enter a class name.');
+  const id = uid();
+  db.classes[id] = { id, name, students: [], attendance: {} };
+  db.selectedClassId = id;
+  $('newClassName').value = '';
+  saveData();
+  renderClassList();
+  refreshClassHeader();
+  switchTab('roster');
+}
+
+function renameClass(){
+  const c = getSelectedClass();
+  if(!c) return;
+  const name = prompt('Rename class:', c.name);
+  if(!name) return;
+  c.name = name.trim();
+  saveData();
+  renderClassList();
+  refreshClassHeader();
+}
+
+function deleteClass(){
+  const c = getSelectedClass();
+  if(!c) return;
+  if(!confirm('Delete class "'+c.name+'"? This cannot be undone.')) return;
+  delete db.classes[c.id];
+  db.selectedClassId = Object.keys(db.classes)[0] || null;
+  saveData();
+  renderClassList();
+  refreshClassHeader();
+  switchTab('roster');
+}
+
+function renderClassList(){
+  const ul = $('classList');
+  ul.innerHTML = '';
+  const ids = Object.keys(db.classes);
+  if(ids.length===0){
+    ul.innerHTML = '<li class="muted small">No classes yet. Add one above.</li>';
+    return;
+  }
+  ids.forEach((id)=>{
+    const c = db.classes[id];
+    const li = document.createElement('li');
+    const left = document.createElement('div');
+    left.className='row';
+    const a = document.createElement('a');
+    a.href='#'; a.className='link';
+    a.textContent = c.name;
+    a.onclick = (e)=>{ e.preventDefault(); db.selectedClassId = id; saveData(); refreshClassHeader(); switchTab("roster"); };
+    const count = document.createElement('span');
+    count.className = 'pill'; count.textContent = c.students.length + ' students';
+    left.appendChild(a); left.appendChild(count);
+    li.appendChild(left);
+    ul.appendChild(li);
+  });
+}
+
+function refreshClassHeader(){
+  const c = getSelectedClass();
+  const title = $('currentClassTitle');
+  if(!c){ title.textContent = 'No class selected'; setDisabled('btnRenameClass',true); setDisabled('btnDeleteClass',true); return; }
+  title.textContent = c.name;
+  setDisabled('btnRenameClass',false);
+  setDisabled('btnDeleteClass',false);
+}
+
+// ======= Roster =======
+function addStudent(){
+  const c = getSelectedClass();
+  if(!c) return alert('Please select a class (left panel).');
+  const name = $('newStudentName').value.trim();
+  if(!name) return alert('Enter student name.');
+  const guardian = $('newStudentGuardian').value.trim();
+  const phone = $('newStudentPhone').value.trim();
+  c.students.push({ id: uid(), name, guardian, phone });
+  $('newStudentName').value = ''; $('newStudentGuardian').value=''; $('newStudentPhone').value='';
+  saveData(); renderRoster();
+}
+
+function removeStudent(id){
+  const c = getSelectedClass(); if(!c) return;
+  c.students = c.students.filter(s=>s.id!==id);
+  // also cleanup attendance records
+  Object.values(c.attendance).forEach(day=>{ delete day[id]; });
+  saveData(); renderRoster();
+}
+
+function renderRoster(){
+  const c = getSelectedClass();
+  const tbody = $('rosterBody');
+  tbody.innerHTML = '';
+  if(!c){ tbody.innerHTML = '<tr><td colspan="5" class="muted">Create or select a class.</td></tr>'; return; }
+  if(c.students.length===0){ tbody.innerHTML = '<tr><td colspan="5" class="muted">No students yet. Add some above.</td></tr>'; return; }
+  c.students.forEach((s,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i+1}</td>
+      <td>${escapeHtml(s.name)}</td>
+      <td>${escapeHtml(s.guardian||'')}</td>
+      <td>${escapeHtml(s.phone||'')}</td>
+      <td><button onclick="removeStudent('${s.id}')">Remove</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ======= Attendance =======
+const STATUSES = ['Present','Absent','Late','Excused'];
+
+function renderAttendance(){
+  const c = getSelectedClass();
+  const tbody = $('attendanceBody');
+  if(!c){ tbody.innerHTML = '<tr><td colspan="4" class="muted">Select a class first.</td></tr>'; return; }
+  $('attendanceDate').value = $('attendanceDate').value || formatDate(new Date());
+  const date = $('attendanceDate').value;
+  const today = c.attendance[date] || {};
+  tbody.innerHTML = '';
+  if(c.students.length===0){ tbody.innerHTML = '<tr><td colspan="4" class="muted">No students in roster.</td></tr>'; return; }
+  c.students.forEach((s,i)=>{
+    const record = today[s.id] || { status:'', note:'' };
+    const tr = document.createElement('tr');
+    const statusOpts = STATUSES.map(st=>`<option ${st===record.status?'selected':''}>${st}</option>`).join('');
+    tr.innerHTML = `<td>${i+1}</td>
+      <td>${escapeHtml(s.name)}</td>
+      <td><select class="status-select" data-student="${s.id}"><option value="">—</option>${statusOpts}</select></td>
+      <td><input type="text" data-note-for="${s.id}" value="${escapeAttr(record.note||'')}" placeholder="Optional note (ill, travel, etc.)"></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function markAll(status){
+  const selects = document.querySelectorAll('#attendanceBody select.status-select, #attendanceBody select');
+  selects.forEach(sel=>{ sel.value = status; });
+}
+
+function saveAttendance(){
+  const c = getSelectedClass(); if(!c) return;
+  const date = $('attendanceDate').value || formatDate(new Date());
+  if(!c.attendance[date]) c.attendance[date] = {};
+  const today = c.attendance[date];
+  const selects = document.querySelectorAll('#attendanceBody select');
+  selects.forEach(sel=>{
+    const id = sel.getAttribute('data-student');
+    const noteEl = document.querySelector('[data-note-for="'+id+'"]');
+    today[id] = { status: sel.value || '', note: (noteEl?.value||'').trim() };
+  });
+  saveData();
+  alert('Attendance saved for '+date);
+}
+
+// ======= Reports =======
+function datesInRange(from, to){
+  const out = [];
+  let d = new Date(from);
+  const end = new Date(to);
+  if(isNaN(d) || isNaN(end)) return out;
+  while(d<=end){ out.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
+  return out;
+}
+
+function refreshReport(){
+  const c = getSelectedClass(); 
+  const body = $('reportBody');
+  const summary = $('reportSummary');
+  body.innerHTML=''; summary.innerHTML='';
+  if(!c){ body.innerHTML = '<tr><td colspan="8" class="muted">Select a class.</td></tr>'; return; }
+  const allDates = Object.keys(c.attendance).sort();
+  if(allDates.length===0){ body.innerHTML = '<tr><td colspan="8" class="muted">No attendance recorded yet.</td></tr>'; return; }
+  const from = $('fromDate').value || allDates[0];
+  const to = $('toDate').value || allDates[allDates.length-1];
+  $('fromDate').value = from; $('toDate').value = to;
+
+  // compute
+  const rows = c.students.map((s)=>({ id:s.id, name:s.name, Present:0, Absent:0, Late:0, Excused:0, Total:0 }));
+  const dates = datesInRange(from,to);
+  dates.forEach(date=>{
+    const day = c.attendance[date] || {};
+    rows.forEach(r=>{
+      const rec = day[r.id];
+      if(rec && rec.status){
+        r[rec.status] += 1;
+        r.Total += 1;
+      }
+    });
+  });
+
+  // totals
+  let totalMeetings = dates.filter(d => c.attendance[d]).length;
+  summary.innerHTML = `<div class="pill">Meetings counted: ${totalMeetings}</div>`;
+
+  rows.forEach((r,i)=>{
+    const pct = r.Total ? Math.round((r.Present/r.Total)*100) : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i+1}</td><td>${escapeHtml(r.name)}</td>
+      <td>${r.Present}</td><td>${r.Absent}</td><td>${r.Late}</td><td>${r.Excused}</td>
+      <td>${r.Total}</td><td>${pct}%</td>`;
+    body.appendChild(tr);
+  });
+}
+
+// Return a 2D array representing the current class report (for Sheets)
+function buildReportMatrix(){
+  const c = getSelectedClass(); 
+  const from = $('fromDate').value;
+  const to = $('toDate').value;
+  if(!c) throw new Error('Select a class.');
+  const headers = ['#','Name','Present','Absent','Late','Excused','Total','% Present'];
+  // compute same as refreshReport
+  const rows = c.students.map((s)=>({ id:s.id, name:s.name, Present:0, Absent:0, Late:0, Excused:0, Total:0 }));
+  const dates = datesInRange(from,to);
+  dates.forEach(date=>{
+    const day = c.attendance[date] || {};
+    rows.forEach(r=>{
+      const rec = day[r.id];
+      if(rec && rec.status){ r[rec.status]++; r.Total++; }
+    });
+  });
+  const matrix = [ [c.name+' — Report'], ['From', from || '', 'To', to || ''], [], headers ];
+  rows.forEach((r,i)=>{
+    const pct = r.Total ? Math.round((r.Present/r.Total)*100) : 0;
+    matrix.push([i+1, r.name, r.Present, r.Absent, r.Late, r.Excused, r.Total, pct+'%']);
+  });
+  return {matrix, title: c.name, from, to};
+}
+
+// ======= Export / Import =======
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(db,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sunday-school-backup.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importJSON(ev){
+  const file = ev.target.files?.[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const obj = JSON.parse(reader.result);
+      if(!obj || !obj.classes) throw new Error('Invalid backup file.');
+      db = obj; saveData();
+      renderClassList(); refreshClassHeader(); switchTab('roster');
+      alert('Backup restored.');
+    }catch(e){
+      alert('Failed to import: '+e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function exportCSV(){
+  const c = getSelectedClass(); if(!c) return alert('Select a class');
+  const from = $('fromDate').value; const to = $('toDate').value;
+  const dates = datesInRange(from,to);
+  const headers = ['Student','Present','Absent','Late','Excused','Total','PercentPresent'];
+  const map = new Map();
+  c.students.forEach(s=>map.set(s.id,{name:s.name, Present:0, Absent:0, Late:0, Excused:0, Total:0}));
+  dates.forEach(d=>{
+    const day=c.attendance[d]||{};
+    map.forEach((r,id)=>{
+      const rec = day[id];
+      if(rec && rec.status){ r[rec.status]++; r.Total++; }
+    });
+  });
+  const lines = [headers.join(',')];
+  map.forEach(r=>{
+    const pct = r.Total? Math.round((r.Present/r.Total)*100):0;
+    lines.push([csv(r.name), r.Present, r.Absent, r.Late, r.Excused, r.Total, pct+'%'].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (c.name.replace(/[^a-z0-9]+/gi,'-').toLowerCase()||'class')+'-attendance.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ======= Print Sheet =======
+function printSheet(){
+  const c = getSelectedClass(); if(!c) return alert('Select a class');
+  const date = $('attendanceDate').value || formatDate(new Date());
+  const rows = c.students.map((s,i)=>`${i+1}. ${s.name}`).join('\n');
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><title>Attendance Sheet - ${c.name}</title>
+  <style>body{font-family:Arial;padding:24px} h1{font-size:20px} .box{border:1px solid #000;height:24px;width:24px;display:inline-block;margin:0 6px}</style>
+  <h1>${escapeHtml(c.name)} — ${date}</h1><ol>${c.students.map(s=>`<li>${escapeHtml(s.name)} <span class="box"></span><span class="box"></span><span class="box"></span></li>`).join('')}</ol>`);
+  w.document.close(); w.focus(); w.print();
+}
+
+// ======= Utilities =======
+function escapeHtml(s){return (s||'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function escapeAttr(s){return escapeHtml(s).replace(/"/g,'&quot;');}
+function csv(s){ return '"'+String(s).replace(/"/g,'""')+'"'; }
+
+// ======= Google Sheets: OAuth (GIS) + Sheets API =======
+// Replace these with your own credentials from Google Cloud Console
+const API_KEY = "YOUR_API_KEY_HERE";
+const CLIENT_ID = "YOUR_CLIENT_ID_HERE.apps.googleusercontent.com";
+const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
+
+let gapiReady = false;
+let tokenClient = null;
+
+// Load gapi client
+function ensureGapiLoaded(){
+  return new Promise((resolve, reject) => {
+    if (gapiReady && gapi.client) return resolve();
+    if (!window.gapi) return reject(new Error("Google API client not loaded."));
+    gapi.load('client', async () => {
+      try{
+        await gapi.client.init({ apiKey: API_KEY, discoveryDocs: ["https://sheets.googleapis.com/$discovery/rest?version=v4"] });
+        gapiReady = true;
+        resolve();
+      }catch(err){ reject(err); }
+    });
+  });
+}
+
+// Get OAuth token via Google Identity Services
+function ensureAccessToken(){
+  return new Promise((resolve, reject) => {
+    try{
+      if (!tokenClient){
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: SCOPES,
+          callback: (resp) => {
+            if (resp && resp.access_token) {
+              gapi.client.setToken({access_token: resp.access_token});
+              resolve(resp.access_token);
+            } else {
+              reject(new Error("No access token returned."));
+            }
+          }
+        });
+      }
+      tokenClient.requestAccessToken({ prompt: '' });
+    }catch(err){ reject(err); }
+  });
+}
+
+// Create a spreadsheet and write a single sheet with the current class report
+async function backupReportToGoogleSheets(){
+  try{
+    const {matrix, title, from, to} = buildReportMatrix();
+    await ensureGapiLoaded();
+    await ensureAccessToken();
+
+    const ts = new Date().toISOString().replace(/[:.]/g,'-');
+    const spreadsheetTitle = `${title} — Attendance Report (${from||'start'} to ${to||'end'}) ${ts}`;
+
+    // 1) Create spreadsheet
+    const createResp = await gapi.client.sheets.spreadsheets.create({
+      properties: { title: spreadsheetTitle },
+      sheets: [{ properties: { title: "Report" } }]
+    });
+    const spreadsheetId = createResp.result.spreadsheetId;
+    const spreadsheetUrl = createResp.result.spreadsheetUrl;
+
+    // 2) Write matrix into "Report" A1
+    await gapi.client.sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: "Report!A1",
+      valueInputOption: "RAW",
+      resource: { values: matrix }
+    });
+
+    alert("✅ Report has been backed up to Google Sheets.");
+    window.open(spreadsheetUrl, "_blank");
+  }catch(err){
+    console.error(err);
+    alert("❌ Google Sheets backup failed: " + (err && err.message ? err.message : err));
+  }
+}
+
+
+function exportXLSX(){
+  const c = getSelectedClass(); if(!c) return alert('Select a class');
+  const from = $('fromDate').value; const to = $('toDate').value;
+  const dates = datesInRange(from,to);
+
+  const headers = ['Student','Present','Absent','Late','Excused','Total','% Present'];
+  const map = new Map();
+  c.students.forEach(s=>map.set(s.id,{name:s.name, Present:0, Absent:0, Late:0, Excused:0, Total:0}));
+  dates.forEach(d=>{
+    const day=c.attendance[d]||{};
+    map.forEach((r,id)=>{
+      const rec = day[id];
+      if(rec && rec.status){ r[rec.status]++; r.Total++; }
+    });
+  });
+
+  const rows = [headers];
+  map.forEach(r=>{
+    const pct = r.Total? Math.round((r.Present/r.Total)*100):0;
+    rows.push([r.name, r.Present, r.Absent, r.Late, r.Excused, r.Total, pct/100]);
+  });
+
+  rows.push([]);
+  rows.push(["Legend:","Green % ≥80%","Red % <80%","Gray 0 = No records"]);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Bold headers
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for(let C=0; C<=range.e.c; ++C){
+    const addr = XLSX.utils.encode_cell({r:0,c:C});
+    if(ws[addr]) ws[addr].s = { font:{bold:true} };
+  }
+
+  // Style cells
+  for(let R=1; R<=range.e.r; ++R){
+    for(let C=1; C<=range.e.c; ++C){
+      const addr = XLSX.utils.encode_cell({r:R,c:C});
+      const cell = ws[addr];
+      if(!cell) continue;
+      if(cell.v===0) cell.s = { fill:{ fgColor:{rgb:"DDDDDD"} } };
+      if(C===6 && typeof cell.v==="number"){
+        cell.z = "0%";
+        cell.s = { font:{ color:{rgb: cell.v>=0.8 ? "008000":"FF0000"} } };
+      }
+    }
+  }
+
+  // Auto-size columns
+  ws['!cols'] = headers.map((h,i)=>({wch: Math.max(h.length,...rows.map(r=>String(r[i]||'').length))+2}));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Report");
+  XLSX.writeFile(wb, (c.name.replace(/[^a-z0-9]+/gi,'-').toLowerCase()||'class')+"-attendance.xlsx");
+}
+
+// ======= Init =======
+function firstTimeSeed(){
+  if(Object.keys(db.classes).length) return;
+  const id = uid();
+  db.classes[id] = { id, name: 'Sample Class', students: [
+    {id:uid(), name:'Alice'}, {id:uid(), name:'Ben'}, {id:uid(), name:'Chandra'}
+  ], attendance:{} };
+  db.selectedClassId = id;
+  saveData();
+}
+
+function init(){
+  firstTimeSeed();
+  renderClassList();
+  refreshClassHeader();
+  switchTab('attendance');
+  // default dates
+  $('attendanceDate').value = formatDate(new Date());
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
